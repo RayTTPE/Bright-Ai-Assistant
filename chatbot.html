@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bright AI Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Thai:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="chatbot.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <section class="profile-panel">
+      <div class="profile-avatar-wrap">
+        <img id="sideProfileImg" alt="profile">
+        <span id="sideProfileFallback">G</span>
+      </div>
+      <div class="profile-meta">
+        <h1 id="sideDisplayName">Guest</h1>
+        <p id="sideEmail">ยังไม่ได้เข้าสู่ระบบ</p>
+        <small id="sideStatus">Login เพื่อใช้ความจำส่วนตัว</small>
+      </div>
+    </section>
+
+    <button class="new-chat-btn" onclick="newChat()">＋ New Chat</button>
+
+    <section class="side-section">
+      <label>ค้นหาห้องแชท</label>
+      <div class="search-box">
+        <span>⌕</span>
+        <input id="chatSearch" placeholder="ค้นหา chat..." oninput="filterChats()">
+      </div>
+    </section>
+
+    <section class="side-section chat-history-section">
+      <label>Recent Chats</label>
+      <div class="chat-list" id="chatList"></div>
+    </section>
+
+    <section class="memory-card" id="memoryCard">
+      <div class="memory-head">
+        <span>Memory Console</span>
+        <strong id="roleBadge">GUEST</strong>
+      </div>
+      <p id="memoryHint">Login เพื่อใช้ความจำส่วนตัวของบัญชีนี้</p>
+      <input id="person" value="Guest" readonly>
+      <textarea id="memoryInput" rows="4" placeholder="บันทึกความจำระยะยาว..."></textarea>
+      <div class="memory-actions">
+        <button onclick="loadMemory()">โหลด</button>
+        <button onclick="saveMemory()">บันทึก</button>
+      </div>
+    </section>
+  </aside>
+
+  <main class="chat-app">
+    <header class="chat-topbar">
+      <div class="top-left">
+        <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+        <div class="app-logo"><img src="./assets/bright-avatar.jpg" alt="Bright AI"></div>
+        <div class="top-title">
+          <h2 id="roomTitle">Bright AI Assistant</h2>
+          <p id="connectionText">Flask API • Ollama • Memory</p>
+        </div>
+      </div>
+
+      <div class="top-auth" id="guestActions">
+        <button onclick="openAuthModal('login')">Login</button>
+        <button onclick="openAuthModal('register')">Register</button>
+      </div>
+
+      <div class="top-user-area guest-hidden">
+        <div class="top-profile-chip">
+          <div class="top-profile-avatar">
+            <img id="topProfileImg" alt="profile">
+            <span id="topProfileFallback">G</span>
+          </div>
+          <div class="top-profile-text">
+            <strong id="topDisplayName">Guest</strong>
+            <small id="topEmail">ยังไม่ได้ login</small>
+          </div>
+        </div>
+
+        <div class="kebab-wrap">
+          <button class="kebab-btn" onclick="toggleProfileMenu()" title="เมนูโปรไฟล์">⋮</button>
+          <div class="profile-menu" id="profileMenu">
+            <button onclick="document.getElementById('profilePicker').click()">อัปโหลดรูปโปรไฟล์</button>
+            <button onclick="toggleTheme()" id="themeToggleBtn">เปลี่ยนธีม: Light</button>
+            <button onclick="openAuthModal('login')" id="menuLoginBtn">Login</button>
+            <button onclick="openAuthModal('register')" id="menuRegisterBtn">Register</button>
+            <button class="danger" onclick="logout()" id="menuLogoutBtn">Logout</button>
+          </div>
+        </div>
+        <input id="profilePicker" type="file" accept="image/*" hidden onchange="handleProfileImage(this.files)">
+      </div>
+    </header>
+
+    <section class="chat-stage">
+      <div id="box" class="message-stream"></div>
+    </section>
+
+    <footer class="composer-wrap">
+      <div class="attachment-preview" id="attachmentPreview"></div>
+
+      <div class="composer">
+        <textarea id="message" rows="1" placeholder="แชทกับ Bright AI..." oninput="autoGrow(this)" onkeydown="composerKey(event)"></textarea>
+        <div class="composer-tools">
+          <label class="round-btn file-label" title="แนบรูป" for="imagePicker">▧</label>
+          <label class="round-btn file-label" title="แนบไฟล์" for="filePicker">⌘</label>
+          <button class="round-btn" title="ไมค์" onclick="voiceSoon()">◉</button>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+        </div>
+      </div>
+
+      <div class="composer-note">
+        <span id="status">Guest Mode: Login ก่อนใช้แชทและความจำส่วนตัว</span>
+      </div>
+
+      <input id="imagePicker" type="file" accept="image/*" multiple hidden onchange="handleFiles(this.files,'image')">
+      <input id="filePicker" type="file" multiple hidden onchange="handleFiles(this.files,'file')">
+    </footer>
+  </main>
+</div>
+
+<div class="modal" id="authModal" aria-hidden="true">
+  <div class="modal-backdrop" onclick="closeAuthModal()"></div>
+  <div class="auth-card" id="authModalCard">
+    <button class="close-modal" onclick="closeAuthModal()">×</button>
+    <div class="auth-art"><h2 id="modalTopTitle">Sign in</h2></div>
+    <div class="auth-body">
+      <h3 id="modalMainTitle">Login</h3>
+      <p id="modalSubTitle">เข้าสู่ระบบเพื่อใช้ความจำส่วนตัวของ Bright AI</p>
+      <div class="form-window">
+        <div class="form-track">
+          <div class="form-pane">
+            <input id="loginEmail" type="email" placeholder="Email">
+            <input id="loginPassword" type="password" placeholder="Password">
+            <button onclick="login()">Login</button>
+            <p>ยังไม่มีบัญชี? <a onclick="switchAuthMode('register')">สมัครสมาชิก</a></p>
+          </div>
+          <div class="form-pane">
+            <input id="regEmail" type="email" placeholder="Email">
+            <input id="regPassword" type="password" placeholder="Password อย่างน้อย 6 ตัว">
+            <button onclick="register()">Create Account</button>
+            <p>มีบัญชีแล้ว? <a onclick="switchAuthMode('login')">กลับไป Login</a></p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-toast" id="modalToast"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><strong id="toastTitle"></strong><p id="toastMsg"></p></div>
+
+<div class="floating-chat-menu" id="floatingChatMenu">
+  <button type="button" onclick="editChatTitle()">แก้ไขชื่อ</button>
+  <button type="button" class="delete-chat-btn" onclick="deleteChatRoom()">ลบแชท</button>
+</div>
+
+<script>
+
+const SUPABASE_URL = "https://whnsnawcxrohwbtqdcmi.supabase.co";
+const SUPABASE_KEY = "sb_publishable_rLLQEyFFdNomzvtaQsWDlg_F-m75rQA";
+const API_URL = "https://postwar-praying-dreamland.ngrok-free.dev";
+const API_KEY = "leng-secret-key";
+const BRIGHT_AVATAR = "./assets/bright-avatar.jpg";
+const OWNER_EMAIL = "kantaphon.masu@bumail.net";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null, accessToken = null, selectedFiles = [];
+let chatRooms = [], currentRoomId = null;
+let activeChatMenuRoomId = null;
+const $ = id => document.getElementById(id);
+const authModal = $("authModal"), authModalCard = $("authModalCard"), modalToast = $("modalToast");
+const box = $("box"), messageInput = $("message"), sendBtn = $("sendBtn"), attachmentPreview = $("attachmentPreview");
+
+
+function updateTopUserAreaVisibility(){
+  const topUserArea = document.querySelector(".top-user-area");
+  if(!topUserArea) return;
+
+  if(currentUser && accessToken){
+    topUserArea.classList.remove("guest-hidden");
+  }else{
+    topUserArea.classList.add("guest-hidden");
+  }
+}
+
+function toggleSidebar(){ document.body.classList.toggle("sidebar-open"); }
+function closeSidebar(){ document.body.classList.remove("sidebar-open"); }
+
+function toast(title,msg){
+  $("toastTitle").textContent = title;
+  $("toastMsg").textContent = msg;
+  const t = $("toast");
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3400);
+}
+
+function openAuthModal(mode="login"){
+  switchAuthMode(mode);
+  authModal.classList.add("show");
+  authModal.setAttribute("aria-hidden","false");
+  document.body.style.overflow = "hidden";
+  setTimeout(() => $(mode === "login" ? "loginEmail" : "regEmail").focus(), 200);
+}
+function closeAuthModal(){
+  authModal.classList.remove("show");
+  authModal.setAttribute("aria-hidden","true");
+  document.body.style.overflow = "";
+  modalToast.textContent = "";
+}
+function switchAuthMode(mode){
+  const isRegister = mode === "register";
+  authModalCard.classList.toggle("register-mode", isRegister);
+  $("modalTopTitle").textContent = isRegister ? "Sign up" : "Sign in";
+  $("modalMainTitle").textContent = isRegister ? "Register" : "Login";
+  $("modalSubTitle").textContent = isRegister ? "สร้างบัญชีเพื่อเริ่มสร้างความจำร่วมกับ Bright AI" : "เข้าสู่ระบบเพื่อใช้ความจำส่วนตัวของ Bright AI";
+  modalToast.textContent = "";
+}
+
+function userKey(){ return currentUser?.email ? currentUser.email.toLowerCase() : "guest"; }
+function chatStorageKey(){ return "bright_chat_rooms_" + userKey(); }
+function profileStorageKey(){ return "bright_profile_image_" + userKey(); }
+function createId(){ return "room_" + Date.now() + "_" + Math.random().toString(16).slice(2); }
+function getDisplayNameFromEmail(email){ return email ? email.split("@")[0] : "Guest"; }
+
+function setUserVisual({name,email,role,status}){
+  $("sideDisplayName").textContent = name;
+  $("sideEmail").textContent = email;
+  $("sideStatus").textContent = status;
+  $("topDisplayName").textContent = name;
+  $("topEmail").textContent = email;
+  $("person").value = role === "USER" ? email : "Guest";
+  $("roleBadge").textContent = role;
+  const letter = (name || "G")[0].toUpperCase();
+  $("sideProfileFallback").textContent = letter;
+  $("topProfileFallback").textContent = letter;
+}
+function setProfileImage(src){
+  const imgs = [$("sideProfileImg"), $("topProfileImg")];
+  const fallbacks = [$("sideProfileFallback"), $("topProfileFallback")];
+  if(src){
+    imgs.forEach(img => { img.src = src; img.classList.add("show"); });
+    fallbacks.forEach(f => f.style.display = "none");
+  }else{
+    imgs.forEach(img => img.classList.remove("show"));
+    fallbacks.forEach(f => f.style.display = "");
+  }
+}
+function loadProfileImage(){ setProfileImage(localStorage.getItem(profileStorageKey())); }
+function handleProfileImage(files){
+  const file = files && files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    localStorage.setItem(profileStorageKey(), e.target.result);
+    setProfileImage(e.target.result);
+    toast("อัปโหลดรูปโปรไฟล์แล้ว","รูปถูกบันทึกไว้ใน browser ของเครื่องนี้ค่ะ");
+    renderCurrentRoom();
+  };
+  reader.readAsDataURL(file);
+  $("profilePicker").value = "";
+}
+
+function getTheme(){ return localStorage.getItem("bright_theme") || "dark"; }
+function applyTheme(theme){
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("bright_theme", theme);
+  $("themeToggleBtn").textContent = theme === "dark" ? "เปลี่ยนธีม: Light" : "เปลี่ยนธีม: Dark";
+}
+function toggleTheme(){ applyTheme(getTheme() === "dark" ? "light" : "dark"); }
+function toggleProfileMenu(force){
+  const menu = $("profileMenu");
+  if(force === false){ menu.classList.remove("show"); return; }
+  menu.classList.toggle("show");
+}
+
+
+function isOwnerAccount(){
+  return (currentUser?.email || "").toLowerCase() === OWNER_EMAIL.toLowerCase();
+}
+
+function updateOwnerOnlyUI(){
+  const memoryCard = $("memoryCard");
+  if(!memoryCard) return;
+  if(isOwnerAccount()){
+    memoryCard.classList.remove("owner-hidden");
+  }else{
+    memoryCard.classList.add("owner-hidden");
+  }
+}
+
+function closeAllChatMenus(){
+  const menu = $("floatingChatMenu");
+  if(menu){
+    menu.classList.remove("show");
+    menu.style.left = "";
+    menu.style.top = "";
+  }
+  activeChatMenuRoomId = null;
+}
+
+function openChatActionMenu(id, anchor, event){
+  event.stopPropagation();
+
+  const menu = $("floatingChatMenu");
+  if(!menu) return;
+
+  activeChatMenuRoomId = id;
+  menu.classList.add("show");
+
+  menu.style.visibility = "hidden";
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+
+  const rect = anchor.getBoundingClientRect();
+  const menuW = menu.offsetWidth || 160;
+  const menuH = menu.offsetHeight || 96;
+  const gap = 8;
+
+  let left = rect.right + gap;
+  if(left + menuW > window.innerWidth - 12){
+    left = rect.left - menuW - gap;
+  }
+  left = Math.max(12, Math.min(left, window.innerWidth - menuW - 12));
+
+  let top = rect.top;
+  if(top + menuH > window.innerHeight - 12){
+    top = window.innerHeight - menuH - 12;
+  }
+  top = Math.max(12, top);
+
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+  menu.style.visibility = "visible";
+}
+
+function editChatTitle(id = activeChatMenuRoomId,event){
+  if(event) event.stopPropagation();
+  const room = chatRooms.find(r => r.id === id);
+  if(!room) return;
+
+  closeAllChatMenus();
+
+  const newTitle = prompt("แก้ไขชื่อหัวข้อแชท", room.title || "แชทใหม่");
+  if(newTitle === null) return;
+
+  const clean = newTitle.trim();
+  if(!clean) return;
+
+  room.title = clean;
+  room.subtitle = "แก้ไขชื่อแล้ว";
+  room.updatedAt = new Date().toISOString();
+
+  saveRooms();
+  renderRoomList();
+  renderCurrentRoom();
+}
+
+function deleteChatRoom(id = activeChatMenuRoomId,event){
+  if(event) event.stopPropagation();
+
+  const room = chatRooms.find(r => r.id === id);
+  const title = room?.title || "แชทนี้";
+
+  closeAllChatMenus();
+
+  if(!confirm("ลบ '" + title + "' ออกจาก Recent Chats ใช่ไหมคะ?")) return;
+
+  chatRooms = chatRooms.filter(r => r.id !== id);
+
+  if(!chatRooms.length){
+    chatRooms = defaultRooms();
+  }
+
+  if(currentRoomId === id){
+    currentRoomId = chatRooms[0].id;
+  }
+
+  saveRooms();
+  renderRoomList();
+  renderCurrentRoom();
+}
+
+function defaultRooms(){
+  return [{
+    id:createId(),
+    title:"แชทใหม่",
+    subtitle:"เริ่มคุยกับ Bright AI",
+    createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString(),
+    messages:[{type:"ai",text:"สวัสดี นี่คือไบร์ทค่ะ\nวันนี้มีอะไรให้ช่วยหรืออยากคุยอะไรดีคะ",files:[],createdAt:new Date().toISOString()}]
+  }];
+}
+function loadRooms(){
+  try{
+    const raw = localStorage.getItem(chatStorageKey());
+    chatRooms = raw ? JSON.parse(raw) : defaultRooms();
+  }catch(e){ chatRooms = defaultRooms(); }
+  if(!chatRooms.length) chatRooms = defaultRooms();
+  chatRooms.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  currentRoomId = chatRooms[0].id;
+  saveRooms();
+  renderRoomList();
+  renderCurrentRoom();
+}
+function saveRooms(){ localStorage.setItem(chatStorageKey(), JSON.stringify(chatRooms)); }
+function currentRoom(){ return chatRooms.find(r => r.id === currentRoomId) || chatRooms[0]; }
+
+function newChat(){
+  if(!requireLogin("การสร้างห้องแชทใหม่")) return;
+const room = {id:createId(),title:"แชทใหม่",subtitle:"ยังไม่มีข้อความ",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),messages:[
+    {type:"ai",text:"เริ่มห้องแชทใหม่แล้วค่ะ",files:[],createdAt:new Date().toISOString()}
+  ]};
+  chatRooms.unshift(room);
+  currentRoomId = room.id;
+  selectedFiles = [];
+  renderAttachmentPreview();
+  saveRooms();
+  renderRoomList();
+  renderCurrentRoom();
+  closeSidebar();
+}
+function selectRoom(id){
+  currentRoomId = id;
+  renderRoomList();
+  renderCurrentRoom();
+  closeSidebar();
+}
+function updateRoomTitleFromMessage(room,text){
+  if(!room || !text) return;
+  if(room.title === "แชทใหม่" || room.title === "Bright AI"){
+    room.title = text.length > 24 ? text.slice(0,24) + "..." : text;
+  }
+  room.subtitle = text.length > 34 ? text.slice(0,34) + "..." : text;
+  room.updatedAt = new Date().toISOString();
+}
+function addMessageToCurrent(type,text,files=[]){
+  const room = currentRoom();
+  if(!room) return;
+  room.messages.push({type,text,files:files.map(f => ({name:f.name,size:f.size,type:f.type})),createdAt:new Date().toISOString()});
+  if(type === "user") updateRoomTitleFromMessage(room,text);
+  room.updatedAt = new Date().toISOString();
+  chatRooms = chatRooms.filter(r => r.id !== room.id);
+  chatRooms.unshift(room);
+  currentRoomId = room.id;
+  saveRooms();
+  renderRoomList();
+  renderMessage(type,text,files);
+}
+function renderRoomList(){
+  const list = $("chatList");
+  const q = $("chatSearch").value.toLowerCase().trim();
+  list.innerHTML = "";
+
+  chatRooms.forEach(room => {
+    const hay = (room.title + " " + room.subtitle).toLowerCase();
+    if(q && !hay.includes(q)) return;
+
+    const item = document.createElement("div");
+    item.className = "chat-room-item" + (room.id === currentRoomId ? " active" : "");
+
+    const btn = document.createElement("button");
+    btn.className = "chat-room";
+    btn.onclick = () => selectRoom(room.id);
+
+    const textWrap = document.createElement("span");
+    textWrap.className = "chat-room-text";
+
+    const title = document.createElement("b");
+    title.textContent = room.title || "แชทใหม่";
+
+    const sub = document.createElement("small");
+    sub.textContent = room.subtitle || "Bright AI chat";
+
+    textWrap.append(title,sub);
+
+    const more = document.createElement("button");
+    more.className = "chat-more-btn";
+    more.type = "button";
+    more.textContent = "⋮";
+    more.title = "จัดการแชท";
+    more.onclick = (event) => openChatActionMenu(room.id, more, event);
+
+    btn.append(textWrap,more);
+    item.append(btn);
+    list.appendChild(item);
+  });
+}
+function renderCurrentRoom(){
+  const room = currentRoom();
+  box.innerHTML = "";
+  if(!room) return;
+  $("roomTitle").textContent = room.title === "แชทใหม่" ? "Bright AI Assistant" : room.title;
+  room.messages.forEach(m => renderMessage(m.type,m.text,m.files || [],false));
+  box.scrollTop = box.scrollHeight;
+}
+function renderMessage(type,text,files=[],scroll=true){
+  const row = document.createElement("div");
+  row.className = "message-row " + type;
+
+  const av = document.createElement("div");
+  av.className = "msg-avatar";
+
+  if(type === "user"){
+    const profileSrc = localStorage.getItem(profileStorageKey());
+    if(profileSrc){
+      const img = document.createElement("img");
+      img.className = "chat-avatar-img";
+      img.src = profileSrc;
+      img.alt = "user profile";
+      av.appendChild(img);
+    }else{
+      av.textContent = "U";
+    }
+  }else{
+    const img = document.createElement("img");
+    img.className = "ai-avatar-img";
+    img.src = BRIGHT_AVATAR;
+    img.alt = "Bright AI";
+    img.onerror = () => {
+      console.log("Bright avatar load failed:", BRIGHT_AVATAR);
+      av.textContent = "B";
+    };
+    av.appendChild(img);
+  }
+
+  const b = document.createElement("div");
+  b.className = "msg-bubble";
+  b.textContent = text;
+
+  if(files.length){
+    const wrap = document.createElement("div");
+    wrap.className = "attachments-in-msg";
+    files.forEach(file => {
+      const p = document.createElement("span");
+      p.textContent = (file.type && file.type.startsWith("image/") ? "รูป: " : "ไฟล์: ") + file.name;
+      wrap.appendChild(p);
+    });
+    b.appendChild(wrap);
+  }
+
+  row.append(av,b);
+  box.appendChild(row);
+  if(scroll) box.scrollTop = box.scrollHeight;
+}
+function filterChats(){ renderRoomList(); }
+
+function setLoggedIn(user,session){
+  currentUser = user;
+  accessToken = session?.access_token || null;
+  $("guestActions").classList.add("hidden");
+  updateTopUserAreaVisibility();
+  $("menuLoginBtn").style.display = "none";
+  $("menuRegisterBtn").style.display = "none";
+  $("menuLogoutBtn").style.display = "block";
+  const name = getDisplayNameFromEmail(user.email);
+  setUserVisual({name,email:user.email,role:"USER",status:"กำลังใช้ความจำส่วนตัวของบัญชีนี้"});
+  $("memoryHint").textContent = "กำลังใช้ความจำส่วนตัวของบัญชีนี้";
+  $("status").textContent = "Login สำเร็จ: " + user.email;
+  $("connectionText").textContent = "User memory active • Flask API • Ollama";
+  loadProfileImage();
+  updateOwnerOnlyUI();
+  closeAuthModal();
+  loadRooms();
+  toast("Welcome to Bright AI","เข้าสู่ระบบสำเร็จค่ะ");
+}
+function setLoggedOut(){
+  currentUser = null;
+  accessToken = null;
+  $("guestActions").classList.remove("hidden");
+  updateTopUserAreaVisibility();
+  $("menuLoginBtn").style.display = "block";
+  $("menuRegisterBtn").style.display = "block";
+  $("menuLogoutBtn").style.display = "none";
+  setUserVisual({name:"Guest",email:"ยังไม่ได้เข้าสู่ระบบ",role:"GUEST",status:"Login เพื่อใช้ความจำส่วนตัว"});
+  $("memoryHint").textContent = "Login เพื่อใช้ความจำส่วนตัวของบัญชีนี้";
+  $("status").textContent = "Guest Mode: Login ก่อนใช้แชทและความจำส่วนตัว";
+  $("connectionText").textContent = "Flask API • Ollama • Memory";
+  loadProfileImage();
+  updateOwnerOnlyUI();
+  loadRooms();
+}
+
+async function register(){
+  const email = $("regEmail").value.trim();
+  const password = $("regPassword").value.trim();
+  if(!email || !password){ modalToast.textContent = "กรุณากรอก Email และ Password"; return; }
+  if(password.length < 6){ modalToast.textContent = "Password ต้องมีอย่างน้อย 6 ตัว"; return; }
+  modalToast.textContent = "กำลังสมัครสมาชิก...";
+  const { error } = await supabaseClient.auth.signUp({ email, password });
+  if(error){ modalToast.textContent = error.message; toast("สมัครไม่สำเร็จ", error.message); return; }
+  toast("สมัครสมาชิกสำเร็จ","ระบบสร้างบัญชีให้แล้วค่ะ");
+  switchAuthMode("login");
+  $("loginEmail").value = email;
+}
+async function login(){
+  const email = $("loginEmail").value.trim();
+  const password = $("loginPassword").value.trim();
+  if(!email || !password){ modalToast.textContent = "กรุณากรอก Email และ Password"; return; }
+  modalToast.textContent = "กำลังเข้าสู่ระบบ...";
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if(error){ modalToast.textContent = error.message; toast("Login ไม่สำเร็จ", error.message); return; }
+  setLoggedIn(data.user,data.session);
+}
+async function logout(){
+  await supabaseClient.auth.signOut();
+  setLoggedOut();
+  toggleProfileMenu(false);
+  toast("Logout แล้ว","ออกจากระบบสำเร็จค่ะ");
+}
+
+function autoGrow(el){ el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight,150) + "px"; }
+function composerKey(e){ if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendMessage(); } }
+function requireLogin(text="ใช้งานส่วนนี้"){
+  if(currentUser && accessToken) return true;
+  toast("ต้อง Login ก่อน", text + " ต้องเข้าสู่ระบบก่อนค่ะ");
+  openAuthModal("login");
+  return false;
+}
+
+function handleFiles(list,source){
+  Array.from(list || []).forEach(file => {
+    const exists = selectedFiles.some(f => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified);
+    if(!exists) selectedFiles.push(file);
+  });
+  $(source === "image" ? "imagePicker" : "filePicker").value = "";
+  renderAttachmentPreview();
+}
+function renderAttachmentPreview(){
+  attachmentPreview.innerHTML = "";
+  attachmentPreview.classList.toggle("show", selectedFiles.length > 0);
+  selectedFiles.forEach((file,i) => {
+    const item = document.createElement("div");
+    item.className = "preview-item";
+    if(file.type.startsWith("image/")){
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(file);
+      img.onload = () => URL.revokeObjectURL(img.src);
+      item.appendChild(img);
+    }else{
+      const icon = document.createElement("div");
+      icon.className = "file-icon";
+      icon.textContent = "DOC";
+      item.appendChild(icon);
+    }
+    const meta = document.createElement("div");
+    meta.className = "preview-meta";
+    meta.innerHTML = `<strong>${file.name}</strong><span>${formatBytes(file.size)}</span>`;
+    const rm = document.createElement("button");
+    rm.className = "remove-file";
+    rm.textContent = "×";
+    rm.onclick = () => { selectedFiles.splice(i,1); renderAttachmentPreview(); };
+    item.append(meta,rm);
+    attachmentPreview.appendChild(item);
+  });
+}
+function formatBytes(b){
+  if(b < 1024) return b + " B";
+  if(b < 1048576) return (b/1024).toFixed(1) + " KB";
+  return (b/1048576).toFixed(1) + " MB";
+}
+function voiceSoon(){ toast("Voice Mode","ปุ่มไมค์วางไว้แล้วค่ะ เดี๋ยวค่อยต่อ Speech-to-Text รอบถัดไป"); }
+
+async function sendMessage(){
+  if(!requireLogin("การแชทพร้อมความจำส่วนตัว")) return;
+  let text = messageInput.value.trim();
+  if(!text && selectedFiles.length) text = "ช่วยดูไฟล์หรือรูปที่แนบให้หน่อยค่ะ";
+  if(!text) return;
+  const filesForMsg = [...selectedFiles];
+  addMessageToCurrent("user",text,filesForMsg);
+  messageInput.value = "";
+  autoGrow(messageInput);
+  sendBtn.disabled = true;
+  sendBtn.textContent = "…";
+  $("status").textContent = selectedFiles.length ? "กำลังส่งข้อความพร้อมไฟล์..." : "กำลังส่งข้อความไปยัง AI...";
+  try{
+    let res;
+    if(selectedFiles.length){
+      const fd = new FormData();
+      fd.append("person", currentUser.email);
+      fd.append("user_id", currentUser.id);
+      fd.append("email", currentUser.email);
+      fd.append("message", text);
+      selectedFiles.forEach(f => fd.append("files", f));
+      res = await fetch(API_URL + "/chat-with-files", {
+        method:"POST",
+        headers:{
+          "Authorization":"Bearer " + accessToken,
+          "x-api-key":API_KEY,
+          "ngrok-skip-browser-warning":"true"
+        },
+        body:fd
+      });
+    }else{
+      res = await fetch(API_URL + "/chat", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "Authorization":"Bearer " + accessToken,
+          "x-api-key":API_KEY,
+          "ngrok-skip-browser-warning":"true"
+        },
+        body:JSON.stringify({person:currentUser.email,user_id:currentUser.id,email:currentUser.email,message:text})
+      });
+    }
+    const data = await res.json();
+    if(!res.ok) addMessageToCurrent("ai","Error: " + (data.error || "เชื่อมต่อไม่ได้"));
+    else{
+      addMessageToCurrent("ai",data.reply || "AI ไม่ได้ส่งคำตอบกลับมา");
+      selectedFiles = [];
+      renderAttachmentPreview();
+    }
+    $("status").textContent = "ตอบกลับสำเร็จ";
+  }catch(err){
+    addMessageToCurrent("ai","เชื่อมต่อ API ไม่ได้: " + err.message);
+    $("status").textContent = "เชื่อมต่อไม่สำเร็จ";
+  }
+  sendBtn.disabled = false;
+  sendBtn.textContent = "➤";
+}
+
+async function saveMemory(){
+  if(!requireLogin("การบันทึกความจำ")) return;
+  const memory = $("memoryInput").value.trim();
+  if(!memory){ toast("ยังไม่มีข้อความ","กรุณาใส่ข้อความความจำก่อน"); return; }
+  try{
+    const res = await fetch(API_URL + "/memory",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer " + accessToken,
+        "x-api-key":API_KEY,
+        "ngrok-skip-browser-warning":"true"
+      },
+      body:JSON.stringify({person:currentUser.email,user_id:currentUser.id,email:currentUser.email,memory})
+    });
+    const data = await res.json();
+    $("memoryInput").value = "";
+    toast("บันทึกความจำสำเร็จ", data.memory || "Memory saved");
+  }catch(err){ toast("บันทึกไม่ได้",err.message); }
+}
+async function loadMemory(){
+  if(!requireLogin("การโหลดความจำ")) return;
+  try{
+    const res = await fetch(API_URL + "/memory?person=" + encodeURIComponent(currentUser.email),{
+      headers:{
+        "Authorization":"Bearer " + accessToken,
+        "ngrok-skip-browser-warning":"true"
+      }
+    });
+    const data = await res.json();
+    addMessageToCurrent("ai","โหลดความจำของ " + currentUser.email + " แล้ว\n\nจำนวนความจำระยะยาว: " + (data.long_memory?.length || 0) + "\nจำนวนประวัติแชท: " + (data.history?.length || 0));
+  }catch(err){ toast("โหลดความจำไม่ได้",err.message); }
+}
+
+document.addEventListener("click", e => {
+  if(!e.target.closest(".kebab-wrap")) $("profileMenu").classList.remove("show");
+  if(!e.target.closest(".floating-chat-menu") && !e.target.closest(".chat-more-btn")) closeAllChatMenus();
+});
+window.addEventListener("resize", closeAllChatMenus);
+setTimeout(() => $("chatList")?.addEventListener("scroll", closeAllChatMenus), 0);
+
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape"){
+    if(authModal.classList.contains("show")) closeAuthModal();
+    closeSidebar();
+    toggleProfileMenu(false);
+  }
+});
+
+applyTheme(getTheme());
+
+supabaseClient.auth.getSession().then(({ data }) => {
+  if(data.session) setLoggedIn(data.session.user,data.session);
+  else setLoggedOut();
+});
+supabaseClient.auth.onAuthStateChange((_event,session) => {
+  if(session?.user) setLoggedIn(session.user,session);
+  else setLoggedOut();
+});
+</script>
+</body>
+</html>
