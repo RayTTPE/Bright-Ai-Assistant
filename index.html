@@ -41,20 +41,6 @@
       <label>Recent Chats</label>
       <div class="chat-list" id="chatList"></div>
     </section>
-
-    <section class="memory-card" id="memoryCard">
-      <div class="memory-head">
-        <span>Memory Console</span>
-        <strong id="roleBadge">GUEST</strong>
-      </div>
-      <p id="memoryHint">Login เพื่อใช้ความจำส่วนตัวของบัญชีนี้</p>
-      <input id="person" value="Guest" readonly>
-      <textarea id="memoryInput" rows="4" placeholder="บันทึกความจำระยะยาว..."></textarea>
-      <div class="memory-actions">
-        <button onclick="loadMemory()">โหลด</button>
-        <button onclick="saveMemory()">บันทึก</button>
-      </div>
-    </section>
   </aside>
 
   <main class="chat-app">
@@ -111,8 +97,8 @@
         <div class="composer-tools">
           <label class="round-btn file-label" title="แนบรูป" for="imagePicker">▧</label>
           <label class="round-btn file-label" title="แนบไฟล์" for="filePicker">⌘</label>
-          <button class="round-btn" title="ไมค์" onclick="voiceSoon()">◉</button>
-          <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+          <button type="button" class="round-btn" title="ไมค์" onclick="voiceSoon()">◉</button>
+          <button type="button" class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
         </div>
       </div>
 
@@ -121,7 +107,7 @@
       </div>
 
       <input id="imagePicker" type="file" accept="image/*" multiple hidden onchange="handleFiles(this.files,'image')">
-      <input id="filePicker" type="file" multiple hidden onchange="handleFiles(this.files,'file')">
+      <input id="filePicker" type="file" accept=".txt,.md,.csv,.json,.html,.css,.js,.py,.log,.xml,.yml,.yaml,.sql,.ini,.env,.pdf,.docx,.xlsx,.pptx" multiple hidden onchange="handleFiles(this.files,'file')">
     </footer>
   </main>
 </div>
@@ -236,8 +222,8 @@ function setUserVisual({name,email,role,status}){
   $("sideStatus").textContent = status;
   $("topDisplayName").textContent = name;
   $("topEmail").textContent = email;
-  $("person").value = role === "USER" ? email : "Guest";
-  $("roleBadge").textContent = role;
+  if($("person")) $("person").value = role === "USER" ? email : "Guest";
+  if($("roleBadge")) $("roleBadge").textContent = role;
   const letter = (name || "G")[0].toUpperCase();
   $("sideProfileFallback").textContent = letter;
   $("topProfileFallback").textContent = letter;
@@ -287,13 +273,9 @@ function isOwnerAccount(){
 }
 
 function updateOwnerOnlyUI(){
-  const memoryCard = $("memoryCard");
-  if(!memoryCard) return;
-  if(isOwnerAccount()){
-    memoryCard.classList.remove("owner-hidden");
-  }else{
-    memoryCard.classList.add("owner-hidden");
-  }
+  // Memory Console ถูกถอดออกจากหน้า UI แล้ว
+  // เก็บฟังก์ชันนี้ไว้เพื่อไม่ให้ code ส่วน login/logout เรียกแล้ว error
+  return;
 }
 
 function closeAllChatMenus(){
@@ -562,7 +544,7 @@ function setLoggedIn(user,session){
   $("menuLogoutBtn").style.display = "block";
   const name = getDisplayNameFromEmail(user.email);
   setUserVisual({name,email:user.email,role:"USER",status:"กำลังใช้ความจำส่วนตัวของบัญชีนี้"});
-  $("memoryHint").textContent = "กำลังใช้ความจำส่วนตัวของบัญชีนี้";
+  if($("memoryHint")) $("memoryHint").textContent = "กำลังใช้ความจำส่วนตัวของบัญชีนี้";
   $("status").textContent = "Login สำเร็จ: " + user.email;
   $("connectionText").textContent = "User memory active • Flask API • Ollama";
   loadProfileImage();
@@ -580,7 +562,7 @@ function setLoggedOut(){
   $("menuRegisterBtn").style.display = "block";
   $("menuLogoutBtn").style.display = "none";
   setUserVisual({name:"Guest",email:"ยังไม่ได้เข้าสู่ระบบ",role:"GUEST",status:"Login เพื่อใช้ความจำส่วนตัว"});
-  $("memoryHint").textContent = "Login เพื่อใช้ความจำส่วนตัวของบัญชีนี้";
+  if($("memoryHint")) $("memoryHint").textContent = "Login เพื่อใช้ความจำส่วนตัวของบัญชีนี้";
   $("status").textContent = "Guest Mode: Login ก่อนใช้แชทและความจำส่วนตัว";
   $("connectionText").textContent = "Flask API • Ollama • Memory";
   loadProfileImage();
@@ -669,61 +651,101 @@ function formatBytes(b){
 function voiceSoon(){ toast("Voice Mode","ปุ่มไมค์วางไว้แล้วค่ะ เดี๋ยวค่อยต่อ Speech-to-Text รอบถัดไป"); }
 
 async function sendMessage(){
-  if(!requireLogin("การแชทพร้อมความจำส่วนตัว")) return;
-  let text = messageInput.value.trim();
-  if(!text && selectedFiles.length) text = "ช่วยดูไฟล์หรือรูปที่แนบให้หน่อยค่ะ";
-  if(!text) return;
-  const filesForMsg = [...selectedFiles];
-  addMessageToCurrent("user",text,filesForMsg);
+  if(!requireLogin("การแชทกับ Bright AI")) return;
+
+  const text = messageInput.value.trim();
+  const filesToSend = [...selectedFiles];
+
+  if(!text && !filesToSend.length){
+    toast("ยังไม่มีข้อความ","พิมพ์ข้อความหรือแนบไฟล์ก่อนส่งค่ะ");
+    return;
+  }
+
+  sendBtn.disabled = true;
+  const originalStatus = $("status").textContent;
+  $("status").textContent = "กำลังส่งข้อความ...";
+
+  addMessageToCurrent("user", text || "ส่งไฟล์/รูปภาพ", filesToSend);
   messageInput.value = "";
   autoGrow(messageInput);
-  sendBtn.disabled = true;
-  sendBtn.textContent = "…";
-  $("status").textContent = selectedFiles.length ? "กำลังส่งข้อความพร้อมไฟล์..." : "กำลังส่งข้อความไปยัง AI...";
+  selectedFiles = [];
+  renderAttachmentPreview();
+
+  const typingId = "typing_" + Date.now();
+  const typingRow = document.createElement("div");
+  typingRow.className = "message-row ai";
+  typingRow.id = typingId;
+  const typingAv = document.createElement("div");
+  typingAv.className = "msg-avatar";
+  const typingImg = document.createElement("img");
+  typingImg.className = "ai-avatar-img";
+  typingImg.src = BRIGHT_AVATAR;
+  typingImg.alt = "Bright AI";
+  typingAv.appendChild(typingImg);
+  const typingBubble = document.createElement("div");
+  typingBubble.className = "msg-bubble";
+  typingBubble.textContent = "กำลังคิด...";
+  typingRow.append(typingAv, typingBubble);
+  box.appendChild(typingRow);
+  box.scrollTop = box.scrollHeight;
+
   try{
     let res;
-    if(selectedFiles.length){
-      const fd = new FormData();
-      fd.append("person", currentUser.email);
-      fd.append("user_id", currentUser.id);
-      fd.append("email", currentUser.email);
-      fd.append("message", text);
-      selectedFiles.forEach(f => fd.append("files", f));
+
+    if(filesToSend.length){
+      const formData = new FormData();
+      formData.append("person", currentUser.email);
+      formData.append("message", text || "ช่วยดูไฟล์/รูปที่แนบให้หน่อยค่ะ");
+      filesToSend.forEach(file => formData.append("files", file));
+
       res = await fetch(API_URL + "/chat-with-files", {
         method:"POST",
         headers:{
+          "x-api-key": API_KEY,
           "Authorization":"Bearer " + accessToken,
-          "x-api-key":API_KEY,
           "ngrok-skip-browser-warning":"true"
         },
-        body:fd
+        body:formData
       });
     }else{
       res = await fetch(API_URL + "/chat", {
         method:"POST",
         headers:{
           "Content-Type":"application/json",
+          "x-api-key": API_KEY,
           "Authorization":"Bearer " + accessToken,
-          "x-api-key":API_KEY,
           "ngrok-skip-browser-warning":"true"
         },
-        body:JSON.stringify({person:currentUser.email,user_id:currentUser.id,email:currentUser.email,message:text})
+        body:JSON.stringify({
+          person: currentUser.email,
+          message:text
+        })
       });
     }
-    const data = await res.json();
-    if(!res.ok) addMessageToCurrent("ai","Error: " + (data.error || "เชื่อมต่อไม่ได้"));
-    else{
-      addMessageToCurrent("ai",data.reply || "AI ไม่ได้ส่งคำตอบกลับมา");
-      selectedFiles = [];
-      renderAttachmentPreview();
+
+    const data = await res.json().catch(() => ({}));
+    document.getElementById(typingId)?.remove();
+
+    if(!res.ok){
+      throw new Error(data.error || "เชื่อมต่อ API ไม่สำเร็จ");
     }
+
+    const reply = data.reply || data.message || "ไบร์ทยังไม่ได้รับคำตอบจากระบบค่ะ";
+    addMessageToCurrent("ai", reply, []);
     $("status").textContent = "ตอบกลับสำเร็จ";
   }catch(err){
-    addMessageToCurrent("ai","เชื่อมต่อ API ไม่ได้: " + err.message);
-    $("status").textContent = "เชื่อมต่อไม่สำเร็จ";
+    document.getElementById(typingId)?.remove();
+    addMessageToCurrent("ai", "เกิดข้อผิดพลาดค่ะ: " + err.message, []);
+    $("status").textContent = "เกิดข้อผิดพลาด";
+    toast("ส่งไม่สำเร็จ", err.message);
+  }finally{
+    sendBtn.disabled = false;
+    setTimeout(() => {
+      if($("status").textContent === "ตอบกลับสำเร็จ" || $("status").textContent === "เกิดข้อผิดพลาด"){
+        $("status").textContent = originalStatus;
+      }
+    }, 2500);
   }
-  sendBtn.disabled = false;
-  sendBtn.textContent = "➤";
 }
 
 async function saveMemory(){
